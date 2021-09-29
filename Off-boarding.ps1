@@ -1,16 +1,25 @@
+#Logs all events that take place in this powershell session and log them in C:\cabs\offboardinglog.log
 Start-Transcript -append C:\cabs\offboardinglog.log
 
 # Replace variables
-
-
-$adname=read-host "AD Username"
-$termdate=read-host "Write 'Term Date mm/dd/yyyy"
-$email=read-host "Off-boarded user email"
-$fullname=read-host "Off-boarded user First + Last name"
-$password=read-host 'Off-boarding password'
-$forwarddelegate=read-host "Insert the email of the user who will have emails forwarded to them"
-$mailboxdelegate=read-host "Insert the first and last name of the user who will recieve full mailbox access"
-
+$name = read-host "User First + Last name"
+$name
+$adname = @(Get-ADUser -Filter {name -like $name}| format-table samaccountname -HideTableHeaders)|out-string
+#trim is important because there are spaces at the end of the variable...
+$adname = $adname.Trim()
+$termdate= Get-Date -Format "MM/dd/yyyy" 
+$termdate
+$email = @(Get-ADUser -Filter {name -like $name} -Properties mail |ft mail -HideTableHeaders) |out-string
+$email
+$fullname = $name
+$password = read-host 'Off-boarding password'
+$password
+$delegate = read-host "First + last name of the email delegate"
+$forwarddelegate = @(Get-ADUser -Filter {name -like $delegate} -Properties mail |ft mail -HideTableHeaders) |out-string
+$forwarddelegate
+$mailboxdelegate = $forwarddelegate
+echo "Please confirm the settings are correct before continuing"
+Pause
 
 # Set logonhours to logon denied
 # Representing the 168 hours in a week
@@ -30,8 +39,8 @@ Set-adaccountpassword -identity $adname -reset -NewPassword (ConvertTo-SecureStr
 
 
 # Sets the Term date description and extension attribute
-Set-ADUser $adname -Description "$termdate"
-Set-ADUser $adname -Add @{extensionAttribute1 = "$termdate"}
+Set-ADUser $adname -Description "TERM DATE $termdate"
+Set-ADUser $adname -Add @{extensionAttribute1 = "TERM DATE $termdate"}
 
 
 # Sets the MsExchHideFromAddressLists to true
@@ -41,12 +50,11 @@ Set-ADUser $adname -Add @{MsExchHideFromAddressLists = ($persistent -ne $false)}
 # Removes the ad user from all groups
 Get-ADUser -Identity $adname -Properties MemberOf | ForEach-Object {
   $_.MemberOf | Remove-ADGroupMember -Members $_.DistinguishedName -Confirm:$false}
-  # Adds user to awarenesstraining exclude group
-Add-ADGroupMember -Identity awarenesstrainingexclude -Members $adname
-Pause
+  
+# Adds user to awarenesstraining exclude group
+Add-ADGroupMember -Identity knowbe4_exclude -Members $adname
 
-
-# Disable AAD sign on and 365
+# Disables 365 sign on 
 Connect-AzureAD
 Set-AzureADUser -ObjectID $email -AccountEnabled $false
 
@@ -64,4 +72,6 @@ Add-MailboxPermission -Identity "$fullname" -User "$mailboxdelegate" -AccessRigh
 Stop-transcript
 
 Pause
+
+
 
